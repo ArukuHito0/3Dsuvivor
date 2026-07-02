@@ -1,8 +1,12 @@
 using System.Collections;
 using System.Collections.Generic;
 
-public abstract class State : IState
+public abstract class HeroState : IState
 {
+    protected HeroController ctx;
+
+    public HeroState(HeroController ctx) => this.ctx = ctx;
+
     public List<IActivity> Activities { get; private set; } = new List<IActivity>();
 
     public void AddActivity(IActivity a)
