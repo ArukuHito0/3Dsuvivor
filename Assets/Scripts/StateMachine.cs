@@ -1,9 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
+using Unity.VisualScripting.Antlr3.Runtime;
+using UnityEngine;
 
 public class StateMachine
 {
-    private HashSet<ITransition> anyTransitions = new HashSet<ITransition>();       // どのステートからでも行うことの出来る遷移
+    private HashSet<ITransition> anyTranditions = new HashSet<ITransition>();
     private Dictionary<Type, StateNode> nodes = new Dictionary<Type, StateNode>();  // 各ステートのノードを保存している辞書
 
     public readonly StateNode Root;
@@ -43,30 +46,23 @@ public class StateMachine
 
     internal void InternalFixedTick(float deltaTime) => Root.FixedUpdate(deltaTime);
 
-    public void ChangeState(IState from, IState to)
+    public void ChangeState(StateNode from, StateNode to)
     {
-        if(from == to || from == null || to == null) return;
+        if(from == null || to == null || from.State == to) return;
 
-        var previousNode = GetOrAddNode(from);
-        var nextNode = GetOrAddNode(to);
+        var fromPath = from.PathToRootCache;
+        var toPath = to.PathToRootCache;
 
-        StateNode lca = TransitionSequencer.Lca(previousNode, nextNode);    // from, toステートの共通の親ステートノードを取得
+        GetDiff(fromPath, toPath, out var exitList, out var enterList);
 
-        for(StateNode s = previousNode; s != lca; s = s.Parent) s.Exit();   // 親ステートノードまで遡り、通ったノードのExitメソッドを実行
-
-        // 遷移先のステートノードまで通るノードを格納しておくスタック
-        var stack = new Stack<StateNode>();
-
-        // 親ステートノードまで遡り、通ったノードをスタックに格納
-        for (StateNode s = nextNode; s != lca; s = s.Parent)
+        for (int i = 0; i < exitList.Count; i++)
         {
-            stack.Push(s);  
+            exitList[i].Exit();
         }
 
-        // スタックに格納されているノードを親ノードから順番にEnterメソッドを実行
-        while (stack.Count > 0)
+        for (int i = enterList.Count - 1; i >= 0; i--)
         {
-            stack.Pop().Enter();    
+            enterList[i].Enter();
         }
     }
 
@@ -82,36 +78,20 @@ public class StateMachine
     }
 
     /// <summary>
-    /// 全てのノードからのtoノードへの遷移を追加する
+    /// 全てのノードからtoノードへの遷移を追加する
     /// </summary>
     /// <param name="to"></param>
     /// <param name="condition"></param>
     public void AddAnyTransition(IState to, IPredicate condition)
     {
-        anyTransitions.Add(new Transition(GetOrAddNode(to).State, condition));
+        anyTranditions.Add(new Transition(to, condition));
     }
-
-    /// <summary>
-    /// 遷移条件を満たしている遷移を返す
-    /// </summary>
-    /// <returns>ITransition</returns>
-    public ITransition GetTransition()
+    
+    public ITransition GetAnyTransition()
     {
-        foreach (var transition in anyTransitions)
-        {
+        foreach (var transition in anyTranditions)
             if (transition.Condition.Evaluate())
-            {
                 return transition;
-            }
-        }
-
-        foreach (var transition in Root.Leaf().transitions)
-        {
-            if (transition.Condition.Evaluate())
-            {
-                return transition;
-            }
-        }
 
         return null;
     }
@@ -131,5 +111,34 @@ public class StateMachine
         }
 
         return nodes[stateType];
+    }
+
+    // 各ステートノードのパスの差分のリストを取得する
+    // Root.Ground.Move → Root.Ground.Attack
+    // 返り値 exitList:Move, enterList:Attack
+    private static void GetDiff(
+        List<StateNode> fromPath,
+        List<StateNode> toPath,
+        out List<StateNode> exitList,
+        out List<StateNode> enterList)
+    {
+        int min = Mathf.Min(fromPath.Count, toPath.Count);
+
+        int idx = 0;
+        while (idx < min && fromPath[idx] == toPath[idx])
+            idx++;
+
+        exitList = new List<StateNode>();
+        enterList = new List<StateNode>();
+
+        for (int i = fromPath.Count - 1; i > idx; i--)
+        {
+            exitList.Add(fromPath[i]);
+        }
+
+        for (int i = idx + 1; i < toPath.Count; i++)
+        {
+            enterList.Add(toPath[i]);
+        }
     }
 }

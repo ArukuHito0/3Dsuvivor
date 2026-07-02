@@ -28,7 +28,7 @@ public class StateMachineBuilder
 
         foreach (var fld in s.GetType().GetFields(flags))
         {
-            if (!typeof(IState).IsAssignableFrom(fld.FieldType)) continue;
+            if (!typeof(StateNode).IsAssignableFrom(fld.FieldType)) continue;
             if (fld.Name == "Parent") continue;
 
             var child = (StateNode)fld.GetValue(s);
